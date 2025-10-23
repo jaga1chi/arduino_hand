@@ -47,7 +47,7 @@ void loop() {
   flexVal2 = analogRead(flexpin3);
   flexVal3 = analogRead(flexpin4);
 
-  Serial.print(460-t/28);
+  Serial.print(460-t/28); //digital pin값 정규화
   Serial.print(",");
   Serial.print(flexVal);
   Serial.print(",");
