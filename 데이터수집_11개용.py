@@ -2,9 +2,10 @@ import json
 import os
 import datetime
 import keyboard  # pip install keyboard
-
+import serial
 # -----------------------------------
-# 기존에 ser = serial.Serial(...) 로 연결되어 있어야 함
+ser= serial.Serial("COM7",9600,timeout=1)
+print(f"PORT:COM7, BAUD:9600")
 # -----------------------------------
 
 # 전역 데이터 저장
@@ -26,7 +27,7 @@ def parse_sensor_line(line: str):
 def save_trial_to_file(word, trial_data):
     """한 시행(trial) 데이터를 해당 수화 JSON 파일에 저장"""
     # ===== 파일 경로 입력 =====
-    save_dir = ""  # 여기에 원하는 경로 입력 예: "D:/수화데이터"
+    save_dir = "C:/Users/pjimi/project/arduino_hand/hand_language_data"  # 여기에 원하는 경로 입력 예: "D:/수화데이터"
     os.makedirs(save_dir, exist_ok=True)
 
     filename = os.path.join(save_dir, f"{word}.json")  # 단어별 파일
@@ -101,7 +102,7 @@ def export_final_file():
         return
 
     # ===== 파일 경로 입력 =====
-    save_dir = ""  # 여기에 원하는 경로 입력 예: "D:/수화데이터"
+    save_dir = "C:/Users/pjimi/project/arduino_hand/hand_language_data"  # 여기에 원하는 경로 입력 예: "D:/수화데이터"
     os.makedirs(save_dir, exist_ok=True)
 
     final_filename = os.path.join(save_dir, f"{word}_final_data_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
