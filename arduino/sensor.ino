@@ -32,7 +32,6 @@ unsigned long readFlexRC(int pin) {
 void setup() {
   initSensor();
   Serial.begin(9600);
-  delay(200);
 }
 
 void loop() {
@@ -47,7 +46,7 @@ void loop() {
   flexVal2 = analogRead(flexpin3);
   flexVal3 = analogRead(flexpin4);
 
-  Serial.print(460-t/28); //digital pin값 정규화
+  Serial.print(480-t/28); //digital pin값 정규화
   Serial.print(",");
   Serial.print(flexVal);
   Serial.print(",");
@@ -71,7 +70,6 @@ void loop() {
   Serial.print(",");
   Serial.print(GyZ);
   Serial.println();
-  delay(300);  
 }
 void initSensor() {
   Wire.begin();
