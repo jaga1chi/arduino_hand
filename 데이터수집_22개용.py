@@ -2,19 +2,31 @@ import json
 import os
 import datetime
 import keyboard  # pip install keyboard
+import serial
 
 # -----------------------------------
-# 기존에 ser = serial.Serial(...) 로 연결되어 있어야 함
+ser = serial.Serial("COM7", 9600, timeout=1)
+print(f"PORT: COM7, BAUD: 9600")
 # -----------------------------------
 
 # 전역 데이터 저장
-all_data = {}  # 수화별 누적 데이터, 예: {"고생":[{trial,frame,name,sensor},...]}
+all_data = {}  # {"단어명": [ {trial, frame, name, sensor}, ... ]}
+
+# ===== 경로 설정 =====
+SAVE_DIR = "C:/Users/pjimi/project/arduino_hand/hand_language_data"
+os.makedirs(SAVE_DIR, exist_ok=True)
+
+# ============================
+# 유틸리티 함수
+# ============================
+
+EXPECTED_SENSOR_COUNT = 22  # ✅ 양손 22개 센서 데이터
 
 def parse_sensor_line(line: str):
     """라인에서 ',' 구분 숫자 22개만 뽑아 리스트로 반환"""
     parts = line.strip().split(',')
-    if len(parts) != 22:
-        print(f"[경고] 센서값 개수 불일치: {len(parts)}개 (22개 필요) | raw: {line}")
+    if len(parts) != EXPECTED_SENSOR_COUNT:
+        print(f"[경고] 센서값 개수 불일치: {len(parts)}개 ({EXPECTED_SENSOR_COUNT}개 필요) | raw: {line}")
         return []
     try:
         vals = [int(x) for x in parts]
@@ -25,11 +37,7 @@ def parse_sensor_line(line: str):
 
 def save_trial_to_file(word, trial_data):
     """한 시행(trial) 데이터를 해당 수화 JSON 파일에 저장"""
-    # ===== 파일 경로 입력 =====
-    save_dir = ""  # 여기에 원하는 경로 입력 예: "D:/수화데이터"
-    os.makedirs(save_dir, exist_ok=True)
-
-    filename = os.path.join(save_dir, f"{word}.json")  # 단어별 파일
+    filename = os.path.join(SAVE_DIR, f"{word}.json")
 
     if os.path.exists(filename):
         with open(filename, 'r', encoding='utf-8') as f:
@@ -42,15 +50,30 @@ def save_trial_to_file(word, trial_data):
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(existing_data, f, indent=4, ensure_ascii=False)
 
-    # 메모리에도 저장
     if word not in all_data:
         all_data[word] = []
     all_data[word].append(trial_data)
 
+def get_next_trial_number(word):
+    """기존 JSON 파일을 열어 해당 단어의 마지막 trial 번호를 가져와 +1 리턴"""
+    filename = os.path.join(SAVE_DIR, f"{word}.json")
+    if not os.path.exists(filename):
+        return 1
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if not data:
+            return 1
+        # trial_data 리스트 → 마지막 trial 번호 가져오기
+        last_trial = data[-1][0]["trial"]
+        return last_trial + 1
+    except:
+        return 1
+
 def collect_mode(word, trial_num):
-    """스페이스바 누르고 있는 동안 센서값 수집"""
+    """스페이스바 누르고 있는 동안 22개 센서값 수집"""
     print(f"\n=== {word} 단어 시행 {trial_num} ===")
-    print("스페이스바를 눌러 수집 시작, 떼면 수집 종료")
+    print("스페이스바를 누르고 있는 동안 수집 시작, 떼면 수집 종료됩니다.")
 
     trial_data = []
     frame_num = 1
@@ -61,22 +84,23 @@ def collect_mode(word, trial_num):
                 line = ser.readline().decode(errors="ignore").strip()
                 if not line:
                     continue
+
                 sensor_vals = parse_sensor_line(line)
-                if len(sensor_vals) != 22:
+                if len(sensor_vals) != EXPECTED_SENSOR_COUNT:
                     continue
 
                 frame_dict = {
                     "trial": trial_num,
                     "frame": frame_num,
                     "name": word,
-                    "sensor": sensor_vals
+                    "sensor": sensor_vals  # ✅ 22개 데이터 저장
                 }
                 trial_data.append(frame_dict)
                 frame_num += 1
-                print(f"\r프레임 수집 중: {frame_num-1}", end="")
+                print(f"\r프레임 수집 중: {frame_num - 1}", end="")
             else:
                 if trial_data:
-                    print("\n스페이스바 떼짐. 수집 종료")
+                    print("\n스페이스바가 떼어졌습니다. 수집 종료.")
                     while True:
                         choice = input("이 시행 데이터를 저장하시겠습니까? (y/n): ").strip().lower()
                         if choice == 'y':
@@ -100,21 +124,37 @@ def export_final_file():
         print(f"[오류] {word}에 대한 데이터가 없습니다.")
         return
 
-    # ===== 파일 경로 입력 =====
-    save_dir = ""  # 여기에 원하는 경로 입력 예: "D:/수화데이터"
-    os.makedirs(save_dir, exist_ok=True)
-
-    final_filename = os.path.join(save_dir, f"{word}_final_data_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+    final_filename = os.path.join(
+        SAVE_DIR,
+        f"{word}_final_data_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    )
 
     with open(final_filename, 'w', encoding='utf-8') as f:
         json.dump(all_data[word], f, indent=4, ensure_ascii=False)
     print(f"{final_filename} 파일 생성 완료!\n")
 
+def load_existing_data():
+    """기존 JSON 파일들을 all_data에 불러오기"""
+    for filename in os.listdir(SAVE_DIR):
+        if filename.endswith(".json") and "_final_data_" not in filename:
+            word = filename.replace(".json", "")
+            filepath = os.path.join(SAVE_DIR, filename)
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    all_data[word] = json.load(f)
+            except Exception as e:
+                print(f"[경고] {filename} 로드 실패: {e}")
+    print(f"[로드 완료] {len(all_data)}개 단어 데이터 불러옴.")
+
+# ============================
+# 메인 메뉴
+# ============================
+
 def main_menu():
-    trial_counter = {}  # 단어별 trial 번호 카운트
+    load_existing_data()  # 프로그램 시작 시 기존 데이터 자동 로드
 
     while True:
-        print("\n==== 수화 데이터 수집 시스템 ====")
+        print("\n==== 수화 데이터 수집 시스템 (양손 22채널) ====")
         print("1. 수화 데이터 수집")
         print("2. 최종 파일 생성")
         print("3. 종료")
@@ -122,21 +162,17 @@ def main_menu():
 
         if choice == '1':
             word = input("수화 이름을 입력하세요: ").strip()
-            trial_num = trial_counter.get(word, 1)
-            print(f"{word} 단어의 {trial_num}번째 시행 수집 예정")
-            collect_mode(word, trial_num)
-            trial_counter[word] = trial_num + 1
+            trial_number = get_next_trial_number(word)
+            print(f"자동 설정된 시행 번호: {trial_number}")
+            collect_mode(word, trial_number)
         elif choice == '2':
             export_final_file()
         elif choice == '3':
-            print("프로그램 종료")
+            print("프로그램을 종료합니다.")
             break
         else:
-            print("1, 2, 3 중에서 선택해주세요.")
+            print("1, 2, 3 중 하나를 선택해주세요.")
 
-# -----------------------------------
-# 기존 while True 루프 아래에 붙여서 실행
-# -----------------------------------
 if __name__ == "__main__":
     try:
         main_menu()
